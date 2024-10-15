@@ -8,6 +8,7 @@ Read packages and input data -> testdata comes from BUFACAP_template
 ```{r}
 ## load packages
 library(SoilR)
+library(ggplot2)
 
 ## use condensed dataset from template to run test model (must be modified)
 data_test <- readxl::read_excel("C:/Users/t.ruhnau/OneDrive - Unique/Dokumente/SOC-Project/Data/BUFACAP/Testdata_from_template2.xlsx")
@@ -21,24 +22,46 @@ Dumpster
 
 # Original values from ERA5
 # Evp=data.frame(Month=1:12, Evp=c(-0.3, -0.3, -0.3, -0.3, -0.26, -0.24, -0.19, -0.15, -0.15, -0.22, -0.26, -0.32))
+
+# ## plot results
+# matplot(years_Spinup, Ct_Spinup, type="l", lty=1, col=1:5,
+#         xlab="Time (years)", ylab="C stocks (Mg/ha)")
+# legend("topleft", c("DPM", "RPM", "BIO", "HUM", "IOM"),
+#        lty=1, col=1:5, bty="n")
 ```
 
 -- Spin-up section -------------------------------------------------------------
 
 Climate and soil data for spin-up run, taken from ERA5 and average values from own database (https://uniquelandusede149.sharepoint.com/:x:/s/1_08ProjekteUL2022/ETngkp6ABnpLpmcY818BsJoBIw8DiQxCHEJqeEGT2SelKQ?e=rHU1JQ)
 
+Section1 Vegetation (Jun-Dec)
+```{r}
+## ## Climate data for Farako-ba, Burkina Faso for 1970 (ERA5)
+Temp_Spinup=data.frame(Month=1:7, Temp=c(37, 25, 24, 24, 26, 26, 25))
+Precip_Spinup=data.frame(Month=1:7, Precip=c(97, 162, 233, 243, 43, 1, 0))
+
+# Converted values from ERA5
+Evp_Spinup=data.frame(Month=1:7, Evp=c(240, 190, 150, 150, 220, 260, 320))
+```
+
+Section2 No-Vegetation (Jan-May)
+```{r}
+## ## Climate data for Farako-ba, Burkina Faso for 1970 (ERA5)
+Temp_Spinup2=data.frame(Month=1:5, Temp=c(26, 28, 30, 30, 28))
+Precip_Spinup2=data.frame(Month=1:5, Precip=c(0, 0, 5, 42, 123))
+
+# Converted values from ERA5
+Evp_Spinup2=data.frame(Month=1:5, Evp=c(300, 300, 300, 300, 260))
+```
+
 Section1: Vegetation = TRUE (bare = FALSE)
 Section2: Vegetation = FALSE (bare = TRUE)
 
-The idea is, to divide the model calibration into to steps. First step, only for the months with vegetation (Section1) and second step only for months without vegetation (Section2). The respective months should be derived from NDVI or literature values, to make sure during the months there is actually no vegetation covering soils. This also affects Cinputs during the same time (probably around 0). After Section1 & 2 there should be a Section3 combining both models to generate output.
+The idea is, to divide the model calibration into to steps. First step, only for the months with vegetation (Section1) and second step only for months without vegetation (Section2). The respective months should be derived from NDVI or literature values, to make sure during the months there is actually no vegetation covering soils. This also affects Cinputs during the same time (probably around 0). After Section1 & 2 there should be a Section3 combining both models to generate output. 
+
+
+Section1: Vegetation months June - Dec
 ```{r}
-## ## Climate data for Farako-ba, Burkina Faso for 1970 (ERA5)
-Temp_Spinup=data.frame(Month=1:12, Temp=c(26, 28, 30, 30, 28, 37, 25, 24, 24, 26, 26, 25))
-Precip_Spinup=data.frame(Month=1:12, Precip=c(0, 0, 5, 42, 123, 97, 162, 233, 243, 43, 1, 0))
-
-# Converted values from ERA5
-Evp_Spinup=data.frame(Month=1:12, Evp=c(300, 300, 300, 300, 260, 240, 190, 150, 150, 220, 260, 320))
-
 ## soil data
 #!# changed values according to average of all experiments in database for 1970-1979
 soil.thick_Spinup=20   #Soil thickness (organic layer topsoil), in cm
@@ -49,11 +72,27 @@ DPM.RPM = 1.44        #DPM/RPM --> DR = arable: 1.44, grasslands: 0.67, forest: 
 FYM = 0               # FYM allocation: DPM: 49%, RPM: 49%, HUM: 2% (Weihermueller et al. 2013)
 
 ## create vector of time steps to run simulation
-years_Spinup=seq(1/12,500,by=1/12) 
+years_Spinup=seq(1/7,500,by=1/7) 
+```
+
+Section2: No Vegetation months Jan - May (only Cinputs and years are changing)
+```{r}
+## soil data
+#!# changed values according to average of all experiments in database for 1970-1979
+soil.thick_Spinup=20   #Soil thickness (organic layer topsoil), in cm
+SOC_Spinup=23.6        #Soil organic carbon in Mg/ha 
+clay_Spinup=13.6       #Percent clay
+Cinputs_Spinup2=1      #Annual C inputs to soil in Mg/ha/yr ##!## estimated value for historical land use from chatgpt
+DPM.RPM = 1.44        #DPM/RPM --> DR = arable: 1.44, grasslands: 0.67, forest: 0.25 (Gottschalk et al. 2012)
+FYM = 0               # FYM allocation: DPM: 49%, RPM: 49%, HUM: 2% (Weihermueller et al. 2013)
+
+## create vector of time steps to run simulation
+years_Spinup2=seq(1/5,500,by=1/5) 
 ```
 
 Spin-up run for test data 
 ```{r}
+#--------------------Section1--------------------------------------------------#
 ## calculate effects of climate on decomposition
 fT_Spinup=fT.RothC(Temp_Spinup[,2]) #Temperature effects per month 
 fW_Spinup=fW.RothC(P=(Precip_Spinup[,2]), E=(Evp_Spinup[,2]), #!# note: if value is negative, RothCModel cant work
@@ -64,51 +103,105 @@ fW_Spinup=fW.RothC(P=(Precip_Spinup[,2]), E=(Evp_Spinup[,2]), #!# note: if value
 fW_Spinup[fW_Spinup < 0] <- 0
 
 xi.frame_Spinup=data.frame(years_Spinup,rep(fT_Spinup*fW_Spinup,length.out=length(years_Spinup)))
+#--------------------Section2--------------------------------------------------#
+### Second spin-up (non-vegetated)
+
+## calculate effects of climate on decomposition
+fT_Spinup2=fT.RothC(Temp_Spinup2[,2]) #Temperature effects per month 
+fW_Spinup2=fW.RothC(P=(Precip_Spinup2[,2]), E=(Evp_Spinup2[,2]), #!# note: if value is negative, RothCModel cant work
+            S.Thick = soil.thick_Spinup, pClay = clay_Spinup,
+            pE = 1.0, bare = TRUE)$b #Moisture effects per month
+
+# Replace negative values in fW with 0
+fW_Spinup2[fW_Spinup2 < 0] <- 0
+
+xi.frame_Spinup2=data.frame(years_Spinup2,rep(fT_Spinup2*fW_Spinup2,length.out=length(years_Spinup2)))
+#--------------------Section_End-----------------------------------------------#
 
 #!# not clear about this method
 FallIOM=0.049*SOC_Spinup^(1.139) #IOM using Falloon method
 
-## run the model
+## run the model Section1
 ## DR = DPM/RPM Ratio must be changed for forest or agroforestry
 Model_Spinup=RothCModel(t=years_Spinup,C0=c(DPM=0, RPM=0, BIO=0, HUM=0, IOM=FallIOM), 
                   In=Cinputs_Spinup, clay=clay_Spinup, xi=xi.frame_Spinup,
                   DR = DPM.RPM, FYM = FYM) #Loads the model
 Ct_Spinup=getC(Model_Spinup) #Calculates stocks for each pool per month
 
-# ## plot results
-# matplot(years_Spinup, Ct_Spinup, type="l", lty=1, col=1:5,
-#         xlab="Time (years)", ylab="C stocks (Mg/ha)")
-# legend("topleft", c("DPM", "RPM", "BIO", "HUM", "IOM"),
-#        lty=1, col=1:5, bty="n")
+## run the model Section2
+## DR = DPM/RPM Ratio must be changed for forest or agroforestry
+Model_Spinup2=RothCModel(t=years_Spinup2,C0=c(DPM=0, RPM=0, BIO=0, HUM=0, IOM=FallIOM), 
+                  In=Cinputs_Spinup2, clay=clay_Spinup, xi=xi.frame_Spinup2,
+                  DR = DPM.RPM, FYM = FYM) #Loads the model
+Ct_Spinup2=getC(Model_Spinup2) #Calculates stocks for each pool per month
 
 ## final pool size
 poolSize_Spinup=as.numeric(tail(Ct_Spinup,1))
 names(poolSize_Spinup)<-c("DPM", "RPM", "BIO", "HUM", "IOM")
 poolSize_Spinup
 
+## final pool size Section2
+poolSize_Spinup2=as.numeric(tail(Ct_Spinup2,1))
+names(poolSize_Spinup2)<-c("DPM", "RPM", "BIO", "HUM", "IOM")
+poolSize_Spinup2
+
 # Sum the carbon stocks for test spin up
 total_C_spinup <- rowSums(Ct_Spinup)
+total_C_spinup2 <- rowSums(Ct_Spinup2)
 
 # Calculate the average total SOC stock over the spin-up period
 average_total_SOC_spinup <- mean(total_C_spinup)
+average_total_SOC_spinup2 <- mean(total_C_spinup2)
 
 # Display the result
 average_total_SOC_spinup
+average_total_SOC_spinup2
 
-# Determine the maximum y-axis limit to fit both lines comfortably
-max_C_spinup <- max(total_C_spinup)
+# Create a data frame for the final pool sizes
+final_pools_df <- data.frame(
+    Pool = c("DPM", "RPM", "BIO", "HUM", "IOM"),
+    Vegetated = poolSize_Spinup,
+    NonVegetated = poolSize_Spinup2
+)
+
+# Combine total carbon stocks into a data frame
+total_C_df <- data.frame(
+    Model = c("Vegetated", "Non-Vegetated"),
+    Total_C = c(sum(poolSize_Spinup), sum(poolSize_Spinup2))
+)
+
+# # Determine the maximum y-axis limit to fit both lines comfortably
+# max_C_spinup <- max(total_C_spinup)
 ```
 
 Plots results
 ```{r}
-# Plot individual pools and total SOC for the spin-up period
-matplot(years_Spinup, Ct_Spinup, type = "l", lty = 1, col = 1:5,
-        xlab = "Time (years)", ylab = "C stocks (Mg/ha)",
-        main = "SOC Pools and Total (Spin-Up)", ylim = c(0, max_C_spinup * 1.1))
+# Plot the final pool sizes
+ggplot(final_pools_df, aes(x = Pool)) +
+    geom_bar(aes(y = Vegetated, fill = "Vegetated"), stat = "identity", position = "dodge") +
+    geom_bar(aes(y = NonVegetated, fill = "Non-Vegetated"), stat = "identity", position = "dodge") +
+    labs(title = "Final Pool Sizes for Vegetated and Non-Vegetated Months",
+         x = "Carbon Pool",
+         y = "Carbon Stock (Mg/ha)",
+         fill = "Model") +
+    theme_minimal()
 
-lines(years_Spinup, total_C_spinup, col = "black", lty = 2)
-legend("topright", c("Total SOC", "DPM", "RPM", "BIO", "HUM", "IOM"),
-       lty = c(1, 1, 1, 1, 1, 1), col = c(1:5, "black"), bty = "n")
+# Plot total carbon stocks
+ggplot(total_C_df, aes(x = Model, y = Total_C, fill = Model)) +
+    geom_bar(stat = "identity") +
+    labs(title = "Total Carbon Stocks for Vegetated and Non-Vegetated Months",
+         x = "Model",
+         y = "Total Carbon Stock (Mg/ha)") +
+    theme_minimal()
+# 
+# # Plot individual pools and total SOC for the spin-up period
+# matplot(years_Spinup, Ct_Spinup, type = "l", lty = 1, col = 1:5,
+#         xlab = "Time (years)", ylab = "C stocks (Mg/ha)",
+#         main = "SOC Pools and Total (Spin-Up)", ylim = c(0, max_C_spinup * 1.1))
+# 
+# lines(years_Spinup, total_C_spinup, col = "black", lty = 2)
+# legend("topright", c("Total SOC", "DPM", "RPM", "BIO", "HUM", "IOM"),
+#        lty = c(1, 1, 1, 1, 1, 1), col = c(1:5, "black"), bty = "n")
 ```
 
 Average value for BAU SOC stock = 17.2 t/ha from 1980-2015
