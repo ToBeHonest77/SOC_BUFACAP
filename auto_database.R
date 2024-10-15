@@ -157,7 +157,7 @@ f4 <- tbl_datacrop %>%
   rename(eID = `Experiment ID`, tID = `Treatment ID`, cID = `Crop ID`, Sample_year = `Sampling year`,
          Yield_kg.ha = `Harvested yield`, Water_content = `Harvested yield water content`,
          Water_content_mass = `Harvested yield water content amount`, Residues_above_Mg.ha = `Residue above-ground`,
-         Sample_depth_cm = `Below-ground sampling depth`, Comment = `Data crop (comment)`)
+         Sample_depth_cm = `Below-ground sampling depth`, DC_Comment = `Data crop (comment)`)
 
 # Set as.numeric
 f4$Sample_year <- as.numeric(f4$Sample_year) # NAs where year is not given
@@ -166,5 +166,73 @@ f4$Water_content_mass <- as.numeric(f4$Water_content_mass)
 f4$Residues_above_Mg.ha <- as.numeric(f4$Residues_above_Mg.ha)
 f4$Sample_depth_cm <- as.numeric(f4$Sample_depth_cm)
 
+# Select and rename columns for datasoil
 f5 <- tbl_datasoil %>% 
-  select()
+  select(!(`Publication ID`)) %>% 
+  rename(eID = `Experiment ID`, tID = `Treatment ID`, Sample_year = `Sampling year`, 
+         Depth_from_cm = `Depth from`, Depth_to_cm = `Depth to`, SOC_conc_g.kg = `SOC conc`, 
+         SOC_conc_SE_g.kg = `SOC conc SE`, Bulk_density_Mg.m3 = `Bulk density`, 
+         BD_method = `Bulk density method`, BD_nsamples = `Bulk density nb samples`, 
+         SOC_stock_Mg.ha = `SOC stock`, SOC_stock_SE_Mg.ha = `SOC stock SE`, 
+         pH_method = `pH method`, DS_comment = `Data soil (comment)`)
+
+# Set as.numeric
+f5$Sample_year <- as.numeric(f5$Sample_year)
+f5$Depth_from_cm <- as.numeric(f5$Depth_from_cm)
+f5$Depth_to_cm <- as.numeric(f5$Depth_to_cm)
+f5$SOC_conc_g.kg <- as.numeric(f5$SOC_conc_g.kg)
+f5$SOC_conc_SE_g.kg <- as.numeric(f5$SOC_conc_SE_g.kg)
+f5$Bulk_density_Mg.m3 <- as.numeric(f5$Bulk_density_Mg.m3)
+f5$BD_nsamples <- as.numeric(f5$BD_nsamples)
+f5$SOC_stock_Mg.ha <- as.numeric(f5$SOC_stock_Mg.ha)
+f5$SOC_stock_SE_Mg.ha <- as.numeric(f5$SOC_stock_SE_Mg.ha)
+f5$pH <- as.numeric(f5$pH)
+
+# Select all columns and rename for soiltype
+f6 <- tbl_soiltype %>% 
+  select(!(`Gravel (> 2 mm)`)) %>% 
+  rename(eID = `Experiment ID`, Top_depth_cm = `Top depth of layer`, Bottom_depth_cm = `Bottom depth of layer`,
+         Clay = `Clay (< 0.002 mm)`, Silt = `Silt (0.002 - 0.05 mm)`, Sand = `Sand (0.05 - 2 mm)`, 
+         Texture_USDA = `Soil texture USDA`, Group_WRB = `Soil group WRB`, Group_quali_WRB = `Soil group WRB qualifier`,
+         Type_USDA = `Soil type USDA`, ST_comment = `Soil (comment)`)
+
+# Set as.numeric
+f6$Top_depth_cm <- as.numeric(f6$Top_depth_cm)
+f6$Bottom_depth_cm <- as.numeric(f6$Bottom_depth_cm)
+f6$Clay <- as.numeric(f6$Clay)
+f6$Silt <- as.numeric(f6$Silt)
+f6$Sand <- as.numeric(f6$Sand)
+
+# Rename columns for treatment
+f7 <- tbl_treatment %>% 
+  rename(eID = `Experiment ID`, tID = `Treatment ID`, Definition = `Treatment definition`,
+         Land_use = `Land use`, Start_year = `Year started`, End_year = `Year ended`,
+         Crop_rotation = `Crop rotation`, T_comment = `Treatment (comment)`, Practice_category = Category)
+
+# Set as.numeric
+f7$Start_year <- as.numeric(f7$Start_year)
+f7$End_year <- as.numeric(f7$End_year)
+
+### and so on... tbls missing are: tbl_irrigation, tbl_tillage
+## should be cleaned as well eventually
+
+#------------------------- filter experiment to work with ---------------------#
+### 1 = experiment, 2 = amendments, 3 = crops, 4 = datacrop, 5 = datasoil, 6 = soiltype, 7 = treatment
+
+# Make a list for filtering
+list_f <- list(f1, f2, f3, f4, f5, f6, f7)
+
+# Define filter criteria
+filter_criteria <- function(df) {
+  df %>% 
+    filter(eID == "Farako-ba")
+}
+
+# Apply filter to all dfs in list
+list_farako_ba <- map(f_list, filter_criteria)
+
+names(list_farako_ba) <- c("fb_experiment", "fb_amendments", "fb_crops", "fb_datacrop", 
+                           "fb_datasoil", "fb_soiltype", "fb_treatment")
+
+# Unpack list to global environment
+list2env(list_farako_ba, .GlobalEnv)
