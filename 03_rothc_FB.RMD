@@ -36,65 +36,86 @@ According to Peña Cabriales et al. (2006) on pg. 59 it says:
 "one rainy season per year, starting in May-June and ending in October." 
 > Filter is set accordingly.
 
-```{r Dumpster}
-#!# values from ERA5 tiff are all negative, calculation error?
-## seems like evaporation = negative values and condensation = positive values according to ERA5 information
-## all values are in m > *-1000 to convert to positive values in mm
-
-# Original values from ERA5
-# Evp=data.frame(Month=1:12, Evp=c(-0.3, -0.3, -0.3, -0.3, -0.26, -0.24, -0.19, -0.15, -0.15, -0.22, -0.26, -0.32))
-
-# ## plot results
-# matplot(years_Spinup, Ct_Spinup, type="l", lty=1, col=1:5,
-#         xlab="Time (years)", ylab="C stocks (Mg/ha)")
-# legend("topleft", c("DPM", "RPM", "BIO", "HUM", "IOM"),
-#        lty=1, col=1:5, bty="n")
-```
-
+Always run in the beginning
 ```{r Climate monthly means}
 # Monthly means from climate_data_FB.R
 mm1 <- read.csv2("output/farako_ba/climate/mm_1970_1990.csv", header = TRUE) %>% select(-1)
 mm2 <- read.csv2("output/farako_ba/climate/mm_1991_2024.csv", header = TRUE) %>% select(-1)
 
-# Filter Month and Experiment for Section1 Rain
-mm1_sec1 <- mm1 %>%
+# Filter Month and Experiment for Spinup section (1970 - 1990)
+mm1_spinup <- mm1 %>%
+  # filter(Month >= 5 & Month <= 10) %>% 
+  filter(Experiment == "Farako-Ba") # Choose the experiment
+
+# Filter Month and Experiment for Section1 Rain (1991 - 2024)
+mm2_sec1 <- mm2 %>% # This will be used for Model Section
   filter(Month >= 5 & Month <= 10) %>% 
   filter(Experiment == "Farako-Ba") # Choose the experiment
 
-# Filter Month and Experiment for Section2 Dry
-mm2_sec2 <- mm2 %>%
+# Filter Month and Experiment for Section2 Dry (1991 - 2024)
+mm2_sec2 <- mm2 %>% # This will be used for Model Section
   filter(Month %in% c(11:12, 1:4)) %>% # to filter months through year
   filter(Experiment == "Farako-Ba") # Choose the experiment
+
+rm(mm1, mm2)
 ```
+```{r Read soil data}
+# Specify the directory where your CSV files are located
+csv_dir <- "output/farako_ba/" # change dir to different LTFEs
 
-```{r Soil & Climate Spin-up}
-## Climate data for Farako-ba, Burkina Faso for 2023 (ERA5)
-Temp=data.frame(Month=1:12, Temp=c(26.2, 28.8, 30.7, 31.2, 30.7, 28.1,
-                                   26.5, 25.4, 26.0, 27.4, 28.6, 25.9))
-Precip=data.frame(Month=1:12, Precip=c(0.03, 0.06, 6.4, 15.6, 31.9, 110.9, 153.0, 285.3, 104.3,
-                                   58.9, 4.9, 0.03))
-Evp=data.frame(Month=1:12, Evp=c(350.1, 340.7, 345.9, 333.5, 323.9, 252.8, 203.7, 163.9, 183.5, 216.0,
-                                    266.8, 332.8))
+# Get a list of all CSV files in the directory
+csv_files <- list.files(path = csv_dir, pattern = "*.csv", full.names = TRUE)
 
-## soil data
-## taken from Testdata_from_template2.xlsx for 1980 - 2015
-soil.thick=20  #Soil thickness (organic layer topsoil), in cm
-SOC=19.95       #Soil organic carbon in Mg/ha
-clay=13.6        #Same as spin-up, should be edited
-Cinputs_BAU=1.2   #Annual C inputs to soil in Mg/ha/yr
-Cinputs_SALM=1.9   # Assumed higher C inputs for Project scenario "SALM" = sustainable agriculture land management
-DPM.RPM = 1.44      # Standard ratio for arable land, agroforestry and forestry have different standard ratios ???
-FYM = 0               # Input factor for Farmyard manure by time
+# Read all CSV files into a list of dataframes
+df_list <- map(csv_files, ~read_csv2(.) %>% select(-1)) # -1 to get rid of first column
 
-## create vector of time steps to run simulation
-years=seq(from=0, to=20, by=1/12) ## changed years from/to > output doesnt change
+# Name the dataframes based on the file names (without extension)
+names(df_list) <- tools::file_path_sans_ext(basename(csv_files))
+
+# Unpack list to global environment
+list2env(df_list, .GlobalEnv)
+
+rm(df_list)
 ```
 
 #-- Spin-up section -----------------------------------------------------------#
 
-```{r Prepare Spin-up}
-#------------------------------- Section1 -------------------------------------#
+```{r Climate Spin-up}
+## Climate data for Farako-ba, Burkina Faso for 1970-1990 (ERA5)
 
+# Mean monthly temperature for 1970-1990
+Temp_Spinup <- mm1_spinup %>% 
+  filter(Variable == "Temp") %>% 
+  select(Month, MeanValue) %>% 
+  rename(Temp = MeanValue)
+
+# Mean monthly precipitation for 1970-1990
+Prec_Spinup <- mm1_spinup %>% 
+  filter(Variable == "Prec") %>% 
+  select(Month, MeanValue) %>% 
+  rename(Prec = MeanValue)
+
+# Mean monthly evaporation for 1970-1990
+Evap_Spinup <- mm1_spinup %>% 
+  filter(Variable == "Evapo") %>% 
+  select(Month, MeanValue) %>% 
+  rename(Evap = MeanValue)
+```
+
+```{r Soil Spin-up}
+# Prepare soil data
+soil.thick_Spinup=20 # Same as model
+SOC_Spinup=17.6        # Change to fit initial SOC stock of model ---> 17.6 for C-FB
+clay_Spinup=7        # Same as model
+Cinputs_Spinup=2.96     # Change to historical land-use --> 2.96 for C-FB
+DPM.RPM = 1.44       # Change if land-use is different to model
+FYM = 0              # Input factor for Farmyard manure by time
+
+# Create vector of time steps to run spin-up
+years_Spinup=seq(from=0, to=500, by=1/12)
+```
+
+```{r Prepare Spin-up}
 # Calculate effects of climate on decomposition
 fT_Spinup=fT.RothC(Temp_Spinup[,2]) # Temperature effects per month 
 fW_Spinup=fW.RothC(P=(Prec_Spinup[,2]), E=(Evap_Spinup[,2]),
@@ -102,154 +123,89 @@ fW_Spinup=fW.RothC(P=(Prec_Spinup[,2]), E=(Evap_Spinup[,2]),
             pE = 1.0, bare = FALSE)$b # Rainy season = vegetation covering the soil (bare = F)
 
 # Replace negative values in fW with 0
-fW_Spinup[fW_Spinup < 0] <- 0 # high Evapo values leads to error in model
+fW_Spinup[fW_Spinup < 0] <- 0 # high Evapo values leads to error in model, still not sure if this is the right way to handle it
 
+# >>Add comment<<
 xi.frame_Spinup=data.frame(years_Spinup,rep(fT_Spinup*fW_Spinup,length.out=length(years_Spinup)))
-
-#------------------------------- Section2 -------------------------------------#
-
-# Calculate effects of climate on decomposition
-fT_Spinup2=fT.RothC(Temp_Spinup2[,2]) # Temperature effects 
-fW_Spinup2=fW.RothC(P=(Prec_Spinup2[,2]), E=(Evap_Spinup2[,2]),
-            S.Thick = soil.thick_Spinup, pClay = clay_Spinup,
-            pE = 1.0, bare = TRUE)$b # Dry season = no vegetation covering the soil (bare = T)
-
-# Replace negative values in fW with 0
-fW_Spinup2[fW_Spinup2 < 0] <- 0
-
-xi.frame_Spinup2=data.frame(years_Spinup2,rep(fT_Spinup2*fW_Spinup2,length.out=length(years_Spinup2)))
-```
-
-```{r Model Spin-up}
-#------------------------------ Model Sec1 & Sec2 -----------------------------#
 
 # Estimating IOM using Falloon method
 FallIOM=0.049*SOC_Spinup^(1.139) 
+```
 
+```{r Model Spin-up}
 # Run the model Section1
 Model_Spinup=RothCModel(t=years_Spinup,C0=c(DPM=0, RPM=0, BIO=0, HUM=0, IOM=FallIOM), 
                   In=Cinputs_Spinup, clay=clay_Spinup, xi=xi.frame_Spinup,
                   DR = DPM.RPM, FYM = FYM)
-Ct_Spinup=getC(Model_Spinup) # Calculates SOC stocks for each pool
 
-# Run the model Section2
-Model_Spinup2=RothCModel(t=years_Spinup2,C0=c(DPM=0, RPM=0, BIO=0, HUM=0, IOM=FallIOM), 
-                  In=Cinputs_Spinup2, clay=clay_Spinup, xi=xi.frame_Spinup2,
-                  DR = DPM.RPM, FYM = FYM)
-Ct_Spinup2=getC(Model_Spinup2) # Calculates SOC stocks for each pool
+# Calculates SOC stocks for each pool
+Ct_Spinup=getC(Model_Spinup) 
 
-# Final pool size Section1
-poolSize_Spinup=as.numeric(tail(Ct_Spinup,1))
-names(poolSize_Spinup)<-c("DPM", "RPM", "BIO", "HUM", "IOM")
+# Final pool size spin-up
+poolSize_Spinup=as.numeric(tail(Ct_Spinup,1)) # Uses the last values to show final pool size
+names(poolSize_Spinup)<-c("DPM", "RPM", "BIO", "HUM", "IOM") # Is that correct?
+
+# Print pool size for spin-up section
 poolSize_Spinup
 
-# Final pool size Section2
-poolSize_Spinup2=as.numeric(tail(Ct_Spinup2,1))
-names(poolSize_Spinup2)<-c("DPM", "RPM", "BIO", "HUM", "IOM")
-poolSize_Spinup2
-
 # Sum the carbon stocks for total spin up
-total_C_spinup <- rowSums(Ct_Spinup)
-total_C_spinup2 <- rowSums(Ct_Spinup2)
-
-# Calculate the average total SOC stock
-average_total_SOC_spinup <- mean(total_C_spinup)
-average_total_SOC_spinup2 <- mean(total_C_spinup2)
-
-# Display the result
-average_total_SOC_spinup
-average_total_SOC_spinup2
-
-# Create a data frame for the final pool sizes
-final_pools_df <- data.frame(
-    Pool = c("DPM", "RPM", "BIO", "HUM", "IOM"),
-    Rainy_season = poolSize_Spinup,
-    Dry_season = poolSize_Spinup2
-)
+total_C_spinup <- sum(poolSize_Spinup)
 
 # Combine total carbon stocks into a data frame
 total_C_df <- data.frame(
-    Model = c("Rainy_season", "Dry_season"),
-    Total_C = c(sum(poolSize_Spinup), sum(poolSize_Spinup2))
+    Model = c("Spinup"),
+    Total_C = c(sum(poolSize_Spinup))
 )
 
 # Print total sum of C after spin-up
-print(sum(total_C_df$Total_C))
-
-# Determine the maximum y-axis limit to fit both lines comfortably
-max_C_spinup <- max(total_C_spinup)
-```
-
-```{r Plot Spin-up}
-# Plot the final pool sizes
-ggplot(final_pools_df, aes(x = Pool)) +
-    geom_bar(aes(y = Rainy_season, fill = "Rainy_season"), stat = "identity", position = "dodge") +
-    geom_bar(aes(y = Dry_season, fill = "Dry_season"), stat = "identity", position = "dodge") +
-    labs(title = "Final Pool Sizes for Rainy_season and Dry_season",
-         x = "Carbon Pool",
-         y = "Carbon Stock (Mg/ha)",
-         fill = "Model") +
-    theme_minimal()
-
-# Plot total carbon stocks
-ggplot(total_C_df, aes(x = Model, y = Total_C, fill = Model)) +
-    geom_bar(stat = "identity") +
-    labs(title = "Total Carbon Stocks for Rainy_season and Dry_season",
-         x = "Model",
-         y = "Total Carbon Stock (Mg/ha)") +
-    theme_minimal()
-
-# Plot individual pools and total SOC for the spin-up period
-matplot(years_Spinup, Ct_Spinup, type = "l", lty = 1, col = 1:5,
-        xlab = "Time (years)", ylab = "C stocks (Mg/ha)",
-        main = "SOC Pools and Total (Spin-Up)", ylim = c(0, max_C_spinup * 1.1))
-
-lines(years_Spinup, total_C_spinup, col = "black", lty = 2)
-legend("topright", c("Total SOC", "DPM", "RPM", "BIO", "HUM", "IOM"),
-       lty = c(1, 1, 1, 1, 1, 1), col = c(1:5, "black"), bty = "n")
+print(total_C_df)
 ```
 
 #-- Prediction section --------------------------------------------------------#
 
-Section1 Rainy Season (May-Oct)
-```{r Sec.1 Climate}
-# Climate data for Farako-ba, Burkina Faso for 1970-1990 (ERA5)
-Temp_Model1 <- mm1_sec1 %>% 
+```{r Sec.1 Climate Model}
+### Climate data for Farako-ba, Burkina Faso 
+## Section1 Rainy Season (May-Oct) for 1991-2024 (ERA5)
+
+# Mean monthly temperature for 1991-2024 (ERA5)
+Temp_Model1 <- mm2_sec1 %>% 
   filter(Variable == "Temp") %>% 
   select(Month, MeanValue) %>% 
   rename(Temp = MeanValue)
-
-Prec_Model1 <- mm1_sec1 %>% 
+# Mean monthly precipitation for 1991-2024 (ERA5)
+Prec_Model1 <- mm2_sec1 %>% 
   filter(Variable == "Prec") %>% 
   select(Month, MeanValue) %>% 
   rename(Prec = MeanValue)
-
-Evap_Model1 <- mm1_sec1 %>% 
+# Mean monthly evaporation for 1991-2024 (ERA5)
+Evap_Model1 <- mm2_sec1 %>% 
   filter(Variable == "Evapo") %>% 
   select(Month, MeanValue) %>% 
   rename(Evap = MeanValue)
 ```
 
-Section2 Dry Season (Nov-Apr)
-```{r Sec.2 Climate}
-## Climate data for Farako-ba, Burkina Faso for 1970-1990 (ERA5)
+```{r Sec.2 Climate Model}
+### Climate data for Farako-ba, Burkina Faso for 1991-2024 (ERA5)
+## Section2 Dry Season (Nov-Apr) for 1991-2024 (ERA5)
+
+# Mean monthly temperature for 1991-2024 (ERA5)
 Temp_Model2 <- mm2_sec2 %>% 
   filter(Variable == "Temp") %>% 
   select(Month, MeanValue) %>% 
   rename(Temp = MeanValue)
-
+# Mean monthly precipitation for 1991-2024 (ERA5)
 Prec_Model2 <- mm2_sec2 %>% 
   filter(Variable == "Prec") %>% 
   select(Month, MeanValue) %>% 
   rename(Prec = MeanValue)
-
+# Mean monthly evaporation for 1991-2024 (ERA5)
 Evap_Model2 <- mm2_sec2 %>% 
   filter(Variable == "Evapo") %>% 
   select(Month, MeanValue) %>% 
   rename(Evap = MeanValue)
 ```
 
-```{r Soil prep C-FB}
+```{r Soil Prep C-FB}
 ### This chunk selects all parameters for the treatment C-FB (control site in Farako-Ba)
 ## For further information see literature in database
 
@@ -257,36 +213,39 @@ Evap_Model2 <- mm2_sec2 %>%
 fb_datasoil <- fb_datasoil %>% 
   mutate(soil.thick = Depth_to_cm - Depth_from_cm)
 
+# Get initial SOC stock 
 fb_SOC <- fb_datasoil %>% 
   filter(tID == "C-FB") %>% 
-  select(eID, tID, Sample_year, SOC_stock_Mg.ha) # Use first year as SOC_spinup in this case 1993 = 16.06
-  
-fb_clay <- fb_soiltype %>% 
-  filter(Bottom_depth_cm == 20) # Use for clays_spinup
+  select(eID, tID, Sample_year, SOC_stock_Mg.ha) # Use first year as initial SOC stock, in this case 1993 = 16.06
 
+# Get clay content
+fb_clay <- fb_soiltype %>% 
+  filter(Bottom_depth_cm == 20) # Use for clay model
+
+# Get carbon residue input
 fb_cinput <- fb_datacrop %>% 
   select(eID, tID, Residues_above_Mg.ha, DC_Comment) %>% 
   filter(tID == "C-FB") %>% 
   mutate(MeanResidues = mean(Residues_above_Mg.ha))# Use average for cinputs_spinup
 ```
 
-Section1: Vegetation (Rainy Season) = TRUE (bare = FALSE)
-```{r Sec.1 Soils}
-# soil data
+```{r Sec.1 Soil Model}
+### Section1: Vegetation (Rainy Season) = TRUE (bare = FALSE)
+## soil data
 soil.thick_Model1 = fb_datasoil$soil.thick[1]   # Soil thickness (organic layer topsoil), in cm
-SOC_Model1 = 16.06    # Soil organic carbon in Mg/ha 
+SOC_Model1 = 16.06    ### Spin-up should fit this initial SOC stock # Soil organic carbon in Mg/ha 
 clay_Model1 = 7       # Percent clay
 Cinputs_Model1 = fb_cinput$MeanResidues[1]       # Annual C inputs to soil in Mg/ha/yr
 DPM.RPM = 1.44         # DPM/RPM --> DR = arable: 1.44, grasslands: 0.67, forest: 0.25 (Gottschalk et al. 2012)
 FYM = 0                # FYM allocation: DPM: 49%, RPM: 49%, HUM: 2% (Weihermueller et al. 2013)
 
 # create vector of time steps to run simulation
-years_Model1 = seq(1/6,500,by=1/6) # change sequence according to rain season
+years_Model1 = seq(1/6,20,by=1/6) # change sequence according to rain season
 ```
 
-Section2: Vegetation (Dry Season) = FALSE (bare = TRUE)
-```{r Sec.2 Soils}
-# soil data
+```{r Sec.2 Soil Model}
+### Section2: Vegetation (Dry Season) = FALSE (bare = TRUE)
+## soil data
 # soil.thick_Model1 = fb_datasoil$soil.thick[1]   # Soil thickness (organic layer topsoil), in cm
 # SOC_Model1 = 16.06        # Soil organic carbon in Mg/ha 
 # clay_Model1 = 7       # Percent clay
@@ -295,10 +254,10 @@ Cinputs_Model2 = 0      # Annual C inputs to soil in Mg/ha/yr
 # FYM = 0                # FYM allocation: DPM: 49%, RPM: 49%, HUM: 2% (Weihermueller et al. 2013)
 
 # create vector of time steps to run simulation
-years_Model2 = seq(1/6,500,by=1/6) # change sequence according to vegetation period
+years_Model2 = seq(1/6,20,by=1/6) # change sequence according to vegetation period
 ```
 
-```{r Prepare Spin-up}
+```{r Prepare Model}
 #------------------------------- Section1 -------------------------------------#
 
 # Calculate effects of climate on decomposition
@@ -323,70 +282,67 @@ fW_Model2=fW.RothC(P=(Prec_Model2[,2]), E=(Evap_Model2[,2]),
 # Replace negative values in fW with 0
 fW_Model2[fW_Model2 < 0] <- 0
 
+# >>>ADD COMMENT<<
 xi.frame_Model2=data.frame(years_Model2,rep(fT_Model2*fW_Model2,length.out=length(years_Model2)))
-```
-
-```{r Model Spin-up}
-#------------------------------ Model Sec1 & Sec2 -----------------------------#
 
 # Estimating IOM using Falloon method
-FallIOM=0.049*SOC_Model1^(1.139) 
+FallIOM=0.049*SOC_Model1^(1.139)
+```
 
-# Run the model Section1
+```{r Model Model}
+# Section1: Run the model
 Model_Model1=RothCModel(t=years_Model1,C0=poolSize_Spinup, # Using pool size from spin-up
                   In=Cinputs_Model1, clay=clay_Model1, xi=xi.frame_Model1,
                   DR = DPM.RPM, FYM = FYM)
 Ct_Model1=getC(Model_Model1) # Calculates SOC stocks for each pool
 
-# Run the model Section2
+# Section2: Run the model
 Model_Model2=RothCModel(t=years_Model2,C0=poolSize_Spinup, # Using pool size from spin-up
                   In=Cinputs_Model2, clay=clay_Model1, xi=xi.frame_Model2, # Only Cinputs change
                   DR = DPM.RPM, FYM = FYM)
 Ct_Model2=getC(Model_Model2) # Calculates SOC stocks for each pool
 
-# Final pool size Section1
+# Section1: Final pool size 
 poolSize_Model1=as.numeric(tail(Ct_Model1,1))
 names(poolSize_Model1)<-c("DPM", "RPM", "BIO", "HUM", "IOM")
 poolSize_Model1
 
-# Final pool size Section2
+# Section2: Final pool size 
 poolSize_Model2=as.numeric(tail(Ct_Model2,1))
 names(poolSize_Model2)<-c("DPM", "RPM", "BIO", "HUM", "IOM")
 poolSize_Model2
 
-# Sum the carbon stocks for total spin up
-total_C_Model1 <- rowSums(Ct_Model1)
-total_C_Model2 <- rowSums(Ct_Model2)
+# Sum of SOC stocks for both sections
+rows_C_Model1 <- rowSums(Ct_Model1)
+rows_C_Model2 <- rowSums(Ct_Model2)
 
-# Calculate the average total SOC stock
-average_total_SOC_Model1 <- mean(total_C_Model1)
-average_total_SOC_Model2 <- mean(total_C_Model2)
-
-# Display the result
-average_total_SOC_Model1
-average_total_SOC_Model2
+# Sum of SOC stocks for both sections
+total_C_Model1 <- sum(poolSize_Model1)
+total_C_Model2 <- sum(poolSize_Model2)
 
 # Create a data frame for the final pool sizes
 final_pools_df <- data.frame(
     Pool = c("DPM", "RPM", "BIO", "HUM", "IOM"),
     Rainy_season = poolSize_Model1,
-    Dry_season = poolSize_Model2
+    Dry_season = poolSize_Model2,
+    Spin_up = poolSize_Spinup
 )
 
-# Combine total carbon stocks into a data frame
+# Combine total carbon stocks into a data frame with spin-up
 total_C_df <- data.frame(
-    Model = c("Rainy_season", "Dry_season"),
-    Total_C = c(sum(poolSize_Model1), sum(poolSize_Model2))
-)
+    Model = c("Rainy_season", "Dry_season", "Spin_up"),
+    Total_C = c(sum(poolSize_Model1), sum(poolSize_Model2), sum(poolSize_Spinup)),
+    Years = c(10, 10, 500)
+    )
 
-# Print total sum of C after spin-up
-print(sum(total_C_df$Total_C))
+# Print results
+print(total_C_df)
 
 # Determine the maximum y-axis limit to fit both lines comfortably
 max_C_Model1 <- max(total_C_Model1)
 ```
 
-```{r Plot Spin-up}
+```{r Plot Model}
 # Plot the final pool sizes
 ggplot(final_pools_df, aes(x = Pool)) +
     geom_bar(aes(y = Rainy_season, fill = "Rainy_season"), stat = "identity", position = "dodge") +
@@ -406,11 +362,58 @@ ggplot(total_C_df, aes(x = Model, y = Total_C, fill = Model)) +
     theme_minimal()
 
 # Plot individual pools and total SOC for the spin-up period
-matplot(years_Spinup, Ct_Spinup, type = "l", lty = 1, col = 1:5,
+matplot(years_, Ct_Spinup, type = "l", lty = 1, col = 1:5,
         xlab = "Time (years)", ylab = "C stocks (Mg/ha)",
-        main = "SOC Pools and Total (Spin-Up)", ylim = c(0, max_C_spinup * 1.1))
+        main = "SOC Pools and Total (Spin-Up)", ylim = c(0, max_C_Model1 * 1.1))
 
 lines(years_Spinup, total_C_spinup, col = "black", lty = 2)
+legend("topright", c("Total SOC", "DPM", "RPM", "BIO", "HUM", "IOM"),
+       lty = c(1, 1, 1, 1, 1, 1), col = c(1:5, "black"), bty = "n")
+```
+
+#-- Dump it --------------------------------------------------------------------
+
+```{r Dumpster}
+#!# values from ERA5 tiff are all negative, calculation error?
+## seems like evaporation = negative values and condensation = positive values according to ERA5 information
+## all values are in m > *-1000 to convert to positive values in mm
+
+# Original values from ERA5
+# Evp=data.frame(Month=1:12, Evp=c(-0.3, -0.3, -0.3, -0.3, -0.26, -0.24, -0.19, -0.15, -0.15, -0.22, -0.26, -0.32))
+
+# ## plot results
+# matplot(years_Spinup, Ct_Spinup, type="l", lty=1, col=1:5,
+#         xlab="Time (years)", ylab="C stocks (Mg/ha)")
+# legend("topleft", c("DPM", "RPM", "BIO", "HUM", "IOM"),
+#        lty=1, col=1:5, bty="n")
+```
+
+Not working anymore
+```{r Plot Spin-up}
+# # Plot the final pool sizes
+# ggplot(final_pools_df, aes(x = Pool)) +
+#     geom_bar(aes(y = Rainy_season, fill = "Rainy_season"), stat = "identity", position = "dodge") +
+#     geom_bar(aes(y = Dry_season, fill = "Dry_season"), stat = "identity", position = "dodge") +
+#     labs(title = "Final Pool Sizes for Rainy_season and Dry_season",
+#          x = "Carbon Pool",
+#          y = "Carbon Stock (Mg/ha)",
+#          fill = "Model") +
+#     theme_minimal()
+
+# Plot total carbon stocks
+ggplot(total_C_df, aes(x = Model, y = Total_C, fill = Model)) +
+    geom_bar(stat = "identity") +
+    labs(title = "Total Carbon Stocks for Rainy_season and Dry_season",
+         x = "Model",
+         y = "Total Carbon Stock (Mg/ha)") +
+    theme_minimal()
+
+# Plot individual pools and total SOC for the spin-up period
+matplot(years_Spinup, Ct_Spinup, type = "l", lty = 1, col = 1:5,
+        xlab = "Time (years)", ylab = "C stocks (Mg/ha)",
+        main = "SOC Pools and Total (Spin-Up)")
+
+lines(years_Spinup, total_C_spinup, col = "black", lty = 2) # Not working anymore...
 legend("topright", c("Total SOC", "DPM", "RPM", "BIO", "HUM", "IOM"),
        lty = c(1, 1, 1, 1, 1, 1), col = c(1:5, "black"), bty = "n")
 ```
